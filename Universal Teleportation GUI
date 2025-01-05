@@ -1,0 +1,419 @@
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+
+local Window = OrionLib:MakeWindow({
+    Name = "PuffHub Universal Teleport GUI",
+    HidePremium = false,
+    SaveConfig = true,
+    ConfigFolder = "TeleportConfig"
+})
+
+local TeleportTab = Window:MakeTab({
+    Name = "Teleportation",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+OrionLib:MakeNotification({
+    Name = "Welcome!",
+    Content = "PuffHub Teleport GUI Loaded Successfully.",
+    Image = "rbxassetid://4483345998",
+    Time = 5
+})
+
+local savedLocations = {}
+local selectedLocation = nil
+
+local function getLocationNames()
+    local names = {}
+    for _, loc in ipairs(savedLocations) do
+        table.insert(names, loc.name)
+    end
+    return names
+end
+
+TeleportTab:AddParagraph("Teleporting", "Some teleportation features, such as saving, removing and teleporting to locations. ")
+
+local LocationDropdown = TeleportTab:AddDropdown({
+    Name = "Select a Location",
+    Default = nil,
+    Options = {},
+    Callback = function(value)
+        for _, loc in ipairs(savedLocations) do
+            if loc.name == value then
+                selectedLocation = loc
+                OrionLib:MakeNotification({
+                    Name = "Location Selected",
+                    Content = "Selected location: " .. loc.name,
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+                break
+            end
+        end
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "Save Current Location",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local position = character:WaitForChild("HumanoidRootPart").Position
+
+        for _, loc in ipairs(savedLocations) do
+            if (loc.position - position).Magnitude < 0.1 then
+                OrionLib:MakeNotification({
+                    Name = "Duplicate Location",
+                    Content = "This location is already saved.",
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+                return
+            end
+        end
+
+        local locationData = {
+            position = position,
+            name = "Location " .. tostring(#savedLocations + 1)
+        }
+        table.insert(savedLocations, locationData)
+
+        LocationDropdown:Refresh(getLocationNames(), true)
+
+        OrionLib:MakeNotification({
+            Name = "Location Saved",
+            Content = "Location saved successfully!",
+            Image = "rbxassetid://4483345998",
+            Time = 5
+        })
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "Remove Selected Location",
+    Callback = function()
+        if selectedLocation then
+            for i, loc in ipairs(savedLocations) do
+                if loc == selectedLocation then
+                    table.remove(savedLocations, i)
+                    break
+                end
+            end
+
+            selectedLocation = nil
+
+            LocationDropdown:Refresh(getLocationNames(), true)
+
+            OrionLib:MakeNotification({
+                Name = "Location Removed",
+                Content = "The selected location has been removed.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "No Location Selected",
+                Content = "Please select a location to remove.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+TeleportTab:AddButton({
+    Name = "Teleport to Selected Location",
+    Callback = function()
+        if selectedLocation then
+            local player = game.Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(selectedLocation.position)
+
+            OrionLib:MakeNotification({
+                Name = "Teleported",
+                Content = "You have been teleported to " .. selectedLocation.name,
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "No Location Selected",
+                Content = "Please select a location to teleport to.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+TeleportTab:AddTextbox({
+    Name = "Rename Selected Location",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(value)
+        if selectedLocation then
+            selectedLocation.name = value
+
+            LocationDropdown:Refresh(getLocationNames(), true)
+
+            OrionLib:MakeNotification({
+                Name = "Renamed",
+                Content = "Location renamed to: " .. value,
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        else
+            OrionLib:MakeNotification({
+                Name = "No Location Selected",
+                Content = "Please select a location to rename.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+TeleportTab:AddParagraph("Auto-Teleport", "Enable this toggle to teleport through saved locations sequentially. It uses the settings below for interval and number of teleports.")
+
+TeleportTab:AddSlider({
+    Name = "Teleport Interval (Milliseconds)",
+    Min = 10,
+    Max = 10000,
+    Default = 100,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 10,
+    ValueName = "ms",
+    Callback = function(value)
+        teleportInterval = value / 1000
+    end
+})
+
+TeleportTab:AddTextbox({
+    Name = "Number of Teleports (0 = Infinite)",
+    Default = "0",
+    TextDisappear = true,
+    Callback = function(value)
+        teleportCount = tonumber(value) or 0
+    end
+})
+
+TeleportTab:AddToggle({
+    Name = "Sequential Teleport Through Locations",
+    Default = false,
+    Callback = function(value)
+        teleportingSequentially = value
+
+        if teleportingSequentially then
+            task.spawn(function()
+                local teleportIterations = 0
+                local locationIndex = 1
+                while teleportingSequentially do
+                    if #savedLocations >= 1 then
+                        local targetLocation = savedLocations[locationIndex]
+
+                        if targetLocation then
+                            local player = game.Players.LocalPlayer
+                            local character = player.Character or player.CharacterAdded:Wait()
+                            character:WaitForChild("HumanoidRootPart").CFrame = CFrame.new(targetLocation.position)
+                        end
+
+                        locationIndex += 1
+                        if locationIndex > #savedLocations then
+                            locationIndex = 1
+                        end
+                    else
+                        OrionLib:MakeNotification({
+                            Name = "No Saved Locations",
+                            Content = "You need at least one saved location to use this feature.",
+                            Image = "rbxassetid://4483345998",
+                            Time = 5
+                        })
+                        break
+                    end
+
+                    teleportIterations += 1
+                    if teleportCount > 0 and teleportIterations >= teleportCount then
+                        teleportingSequentially = false
+                        break
+                    end
+
+                    task.wait(teleportInterval)
+                end
+
+                if not teleportingSequentially then
+                    OrionLib:MakeNotification({
+                        Name = "Teleporting Stopped",
+                        Content = "Sequential teleportation has stopped.",
+                        Image = "rbxassetid://4483345998",
+                        Time = 5
+                    })
+                end
+            end)
+        end
+    end
+})
+
+local PlayerTab = Window:MakeTab({
+    Name = "Player Teleports",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local teleportingToPlayer = false
+local teleportInterval = 200
+
+local function findPlayerByPartialNameOrNickname(partialName)
+    for _, player in ipairs(game.Players:GetPlayers()) do
+        if player.Name:lower():find(partialName:lower()) or player.DisplayName:lower():find(partialName:lower()) then
+            return player
+        end
+    end
+    return nil
+end
+
+PlayerTab:AddParagraph("Player Teleports", "Some player teleportation features, such as regular teleportation to players or automatic teleportation to players.")
+
+PlayerTab:AddTextbox({
+    Name = "Player Name/Nickname (Partial)",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(value)
+        selectedPlayerName = value
+    end
+})
+
+PlayerTab:AddButton({
+    Name = "Teleport to Player",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local targetPlayer = findPlayerByPartialNameOrNickname(selectedPlayerName)
+
+        if targetPlayer and targetPlayer.Character then
+            local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                character:WaitForChild("HumanoidRootPart").CFrame = targetRoot.CFrame
+
+                OrionLib:MakeNotification({
+                    Name = "Teleported",
+                    Content = "Teleported to " .. targetPlayer.DisplayName .. " (" .. targetPlayer.Name .. ")",
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+            else
+                OrionLib:MakeNotification({
+                    Name = "No Target Found",
+                    Content = targetPlayer.DisplayName .. " does not have a valid character.",
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+            end
+        else
+            OrionLib:MakeNotification({
+                Name = "Player Not Found",
+                Content = "No player found matching: " .. selectedPlayerName,
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+
+PlayerTab:AddSlider({
+    Name = "Teleport Interval (Milliseconds)",
+    Min = 10,
+    Max = 10000,
+    Default = 200,
+    Color = Color3.fromRGB(255, 255, 255),
+    Increment = 100,
+    ValueName = "ms",
+    Callback = function(value)
+        teleportInterval = value / 1000
+    end
+})
+
+PlayerTab:AddToggle({
+    Name = "Auto-Teleport to Player",
+    Default = false,
+    Callback = function(value)
+        teleportingToPlayer = value
+
+        if teleportingToPlayer then
+            -- Start Auto-Teleport
+            task.spawn(function()
+                while teleportingToPlayer do
+                    local player = game.Players.LocalPlayer
+                    local character = player.Character or player.CharacterAdded:Wait()
+                    local targetPlayer = findPlayerByPartialNameOrNickname(selectedPlayerName)
+
+                    if targetPlayer and targetPlayer.Character then
+                        local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if targetRoot then
+                            character:WaitForChild("HumanoidRootPart").CFrame = targetRoot.CFrame
+                        end
+                    end
+
+                    task.wait(teleportInterval)
+                end
+            end)
+        end
+    end
+})
+
+PlayerTab:AddButton({
+    Name = "Teleport to Closest Player",
+    Callback = function()
+        local localPlayer = game.Players.LocalPlayer
+        local localCharacter = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+        local localRoot = localCharacter:FindFirstChild("HumanoidRootPart")
+
+        if localRoot then
+            local closestPlayer = nil
+            local closestDistance = math.huge
+
+            for _, player in ipairs(game.Players:GetPlayers()) do
+                if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = (player.Character.HumanoidRootPart.Position - localRoot.Position).Magnitude
+                    if distance < closestDistance then
+                        closestDistance = distance
+                        closestPlayer = player
+                    end
+                end
+            end
+
+            if closestPlayer then
+                local targetRoot = closestPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetRoot then
+                    localRoot.CFrame = targetRoot.CFrame
+
+                    OrionLib:MakeNotification({
+                        Name = "Teleported",
+                        Content = "Teleported to " .. closestPlayer.Name,
+                        Image = "rbxassetid://4483345998",
+                        Time = 5
+                    })
+                end
+            else
+                OrionLib:MakeNotification({
+                    Name = "No Players Nearby",
+                    Content = "No valid players found nearby.",
+                    Image = "rbxassetid://4483345998",
+                    Time = 5
+                })
+            end
+        end
+    end
+})
+
+local CreditsTab = Window:MakeTab({
+    Name = "Credits",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+CreditsTab:AddLabel("Developed by: gerian.exe")
+
+CreditsTab:AddParagraph("Discord Server", "Join my Discord server for support and updates:\nhttps://discord.gg/6jDWJvTx45")
+
+OrionLib:Init()
